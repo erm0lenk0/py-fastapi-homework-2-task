@@ -1,6 +1,8 @@
 import math
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from starlette import status
@@ -10,6 +12,7 @@ from schemas.movies import (
     MovieListItemSchema,
     MovieDetailSchema,
     MovieCreateSchema,
+    MovieUpdateSchema,
 )
 from database import get_db, models
 
@@ -22,9 +25,8 @@ async def get_movies(
     per_page: int = Query(10, ge=1, le=20),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(models.MovieModel))
-    movies_all = result.scalars().all()
-    total_items = len(movies_all)
+    result = await db.execute(select(func.count(models.MovieModel.id)))
+    total_items = result.scalar_one()
 
     if total_items == 0:
         raise HTTPException(status_code=404, detail="No movies found.")
@@ -200,7 +202,9 @@ async def delete_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.patch("/movies/{movie_id}/", status_code=status.HTTP_200_OK)
 async def update_movie(
-    movie_id: int, movie_update: dict, db: AsyncSession = Depends(get_db)
+    movie_id: int,
+    movie_update: MovieUpdateSchema,
+    db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
         select(models.MovieModel).where(models.MovieModel.id == movie_id)
@@ -212,29 +216,10 @@ async def update_movie(
             status_code=404, detail="Movie with the given ID was not found."
         )
 
-    if "score" in movie_update:
-        if not (0 <= movie_update["score"] <= 100):
-            raise HTTPException(status_code=400, detail="Invalid input data.")
-        movie.score = movie_update["score"]
+    update_movie = movie_update.dict(exclude_unset=True)
 
-    if "budget" in movie_update:
-        if movie_update["budget"] < 0:
-            raise HTTPException(status_code=400, detail="Invalid input data.")
-        movie.budget = movie_update["budget"]
-
-    if "revenue" in movie_update:
-        if movie_update["revenue"] < 0:
-            raise HTTPException(status_code=400, detail="Invalid input data.")
-        movie.revenue = movie_update["revenue"]
-
-    if "name" in movie_update:
-        movie.name = movie_update["name"]
-
-    if "overview" in movie_update:
-        movie.overview = movie_update["overview"]
-
-    if "status" in movie_update:
-        movie.status = movie_update["status"]
+    for field, value in update_movie.items():
+        setattr(movie, field, value)
 
     db.add(movie)
     await db.commit()

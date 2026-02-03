@@ -1,39 +1,31 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 
 class CountrySchema(BaseModel):
     id: int
     code: str
     name: Optional[str]
-
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class GenreSchema(BaseModel):
     id: int
     name: str
-
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ActorSchema(BaseModel):
     id: int
     name: str
-
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class LanguageSchema(BaseModel):
     id: int
     name: str
-
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class MovieListItemSchema(BaseModel):
@@ -42,9 +34,7 @@ class MovieListItemSchema(BaseModel):
     date: date
     score: float
     overview: str
-
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class MovieListResponseSchema(BaseModel):
@@ -53,6 +43,51 @@ class MovieListResponseSchema(BaseModel):
     next_page: Optional[str]
     total_pages: int
     total_items: int
+
+
+class MovieBaseSchema(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    date: Optional[date]
+    score: Optional[float] = Field(None, ge=0, le=100)
+    overview: Optional[str]
+    status: Optional[str]
+    budget: Optional[float] = Field(None, ge=0)
+    revenue: Optional[float] = Field(None, ge=0)
+
+    @field_validator("date")
+    def validate_date(cls, v: Optional[date]):
+        if v and v > (datetime.now().date() + timedelta(days=365)):
+            raise ValueError("Release date cannot be more than one year in the future")
+        return v
+
+    @field_validator("status")
+    def validate_status(cls, v: Optional[str]):
+        if v is None:
+            return v
+        allowed_statuses = {"Released", "Post Production", "In Production"}
+        if v not in allowed_statuses:
+            raise ValueError(
+                "Status must be one of: Released, Post Production, In Production."
+            )
+        return v
+
+
+class MovieCreateSchema(MovieBaseSchema):
+    country: str
+    genres: List[str]
+    actors: List[str]
+    languages: List[str]
+
+
+class MovieUpdateSchema(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    date: Optional[date] = None
+    score: Optional[float] = Field(None, ge=0, le=100)
+    overview: Optional[str] = None
+    status: Optional[str] = None
+    budget: Optional[float] = Field(None, ge=0)
+    revenue: Optional[float] = Field(None, ge=0)
+
 
 
 class MovieDetailSchema(BaseModel):
@@ -69,34 +104,4 @@ class MovieDetailSchema(BaseModel):
     actors: List[ActorSchema]
     languages: List[LanguageSchema]
 
-    class Config:
-        from_attributes = True
-
-
-class MovieCreateSchema(BaseModel):
-    name: str = Field(..., max_length=255)
-    date: date
-    score: float = Field(..., ge=0, le=100)
-    overview: str
-    status: str
-    budget: float = Field(..., ge=0)
-    revenue: float = Field(..., ge=0)
-    country: str
-    genres: List[str]
-    actors: List[str]
-    languages: List[str]
-
-    @validator("date")
-    def validate_date(cls, v):
-        if v > (datetime.now().date().replace(year=datetime.now().year + 1)):
-            raise ValueError("Release date cannot be more than one year in the future")
-        return v
-
-    @validator("status")
-    def validate_status(cls, v: str):
-        allowed_statuses = {"Released", "Post Production", "In Production"}
-        if v not in allowed_statuses:
-            raise ValueError(
-                "Status most be one of: Released, Post Production, In Production."
-            )
-        return
+    model_config = {"from_attributes": True}
